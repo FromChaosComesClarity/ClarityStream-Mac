@@ -4,31 +4,45 @@
 // plutil has flattened it to JSON, and dns-sd's output.
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { hostsFromSettings } = require('../packages/core/moonlight-mac');
+const { hostsFromSettings, pickSettingsFile } = require('../packages/core/moonlight-mac');
+const plist = require('../packages/core/plist-xml');
 const { parseBrowse, parseResolve } = require('../packages/core/discovery-mac');
 
-// QSettings writes its groups as slash-joined keys, so the plist is flat.
+// QSettings on macOS writes its groups as dot-joined keys, so the plist is
+// flat. Shape copied from Moonlight 6.2.0's own plist on an M2 Mac; addresses
+// are documentation values. Certificates are <data>, so they arrive as Buffers.
 const PLIST = {
-  'hosts/1/hostname': 'omarchy',
-  'hosts/1/uuid': '00000000-0000-4000-8000-000000000001',
-  'hosts/1/manualaddress': '',
-  'hosts/1/localaddress': '192.0.2.10',
-  'hosts/1/manualport': 47989,
-  'hosts/1/srvcert': '-----BEGIN CERTIFICATE-----\nMIIC0jCCAbqgAwIBAgIUZ...\n-----END CERTIFICATE-----\n',
-  'hosts/1/apps/1/name': 'Clarity Couch Mode',
-  'hosts/1/apps/1/id': '348444178',
-  'hosts/1/apps/1/hidden': false,
-  'hosts/1/apps/2/name': 'Clarity Desktop',
-  'hosts/1/apps/2/id': '1684772458',
-  'hosts/1/apps/2/hidden': false,
-  'hosts/1/apps/3/name': 'Hidden One',
-  'hosts/1/apps/3/id': '999',
-  'hosts/1/apps/3/hidden': true,
-  'hosts/2/hostname': 'never-paired',
-  'hosts/2/localaddress': '192.0.2.11',
-  // no srvcert: not paired
+  'hosts.1.customname': false,
+  'hosts.1.hostname': 'omarchy',
+  'hosts.1.uuid': '00000000-0000-4000-8000-000000000001',
+  'hosts.1.ipv6address': '',
+  'hosts.1.ipv6port': 0,
+  'hosts.1.manualaddress': '',
+  'hosts.1.manualport': 0,
+  'hosts.1.localaddress': '192.0.2.10',
+  'hosts.1.localport': 47989,
+  'hosts.1.remoteaddress': '198.51.100.7',
+  'hosts.1.remoteport': 47999,
+  'hosts.1.mac': Buffer.alloc(0),
+  'hosts.1.srvcert': Buffer.from('-----BEGIN CERTIFICATE-----\nMIIC0jCCAbqgAwIBAgIUZ...\n-----END CERTIFICATE-----\n'),
+  'hosts.1.apps.1.name': 'Clarity Couch Mode',
+  'hosts.1.apps.1.id': 348444178,
+  'hosts.1.apps.1.hidden': false,
+  'hosts.1.apps.2.name': 'Clarity Desktop',
+  'hosts.1.apps.2.id': 1684772458,
+  'hosts.1.apps.2.hidden': false,
+  'hosts.1.apps.3.name': 'Hidden One',
+  'hosts.1.apps.3.id': 999,
+  'hosts.1.apps.3.hidden': true,
+  'hosts.2.hostname': 'never-paired',
+  'hosts.2.manualaddress': '',
+  'hosts.2.manualport': 0,
+  'hosts.2.localaddress': '192.0.2.11',
+  'hosts.2.localport': 47989,
+  'hosts.2.srvcert': Buffer.alloc(0),
+  'hosts.size': 2,
   'latestsupportedversion-v1': '99.99.99.99',
-  'gcmapping/size': 0
+  'gcmapping.size': 0
 };
 
 test('hosts come out of a flattened plist', () => {
@@ -61,7 +75,7 @@ test('an empty manualaddress does not win over a real one', () => {
 test('rubbish in, nothing out, no crash', () => {
   assert.deepStrictEqual(hostsFromSettings(null), []);
   assert.deepStrictEqual(hostsFromSettings({}), []);
-  assert.deepStrictEqual(hostsFromSettings({ 'hosts/1/uuid': 'no hostname here' }), []);
+  assert.deepStrictEqual(hostsFromSettings({ 'hosts.1.uuid': 'no hostname here' }), []);
 });
 
 test('dns-sd browse: Add rows only, names may contain spaces', () => {
@@ -86,4 +100,57 @@ test('dns-sd output that resolves nothing is null, not a guess', () => {
   assert.strictEqual(parseResolve('Lookup omarchy._nvstream._tcp.local'), null);
   assert.strictEqual(parseResolve(''), null);
   assert.strictEqual(parseBrowse('').length, 0);
+});
+
+test('a manual address brings its own port', () => {
+  const h = hostsFromSettings({ ...PLIST, 'hosts.1.manualaddress': '192.0.2.99', 'hosts.1.manualport': 48000 })
+    .find((x) => x.hostname === 'omarchy');
+  assert.strictEqual(h.address, '192.0.2.99');
+  assert.strictEqual(h.port, 48000);
+});
+
+test("Moonlight's own plist is chosen, never a game called Moonlighter", () => {
+  // The first Mac this ran on had Moonlighter installed and no Moonlight.
+  assert.strictEqual(pickSettingsFile(['unity.DigitalSunGames.Moonlighter.plist']), null);
+  assert.strictEqual(
+    pickSettingsFile(['unity.DigitalSunGames.Moonlighter.plist', 'com.moonlight-stream.Moonlight.plist']),
+    'com.moonlight-stream.Moonlight.plist');
+});
+
+test('plist XML: data, empty elements, entities, nesting', () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>certificate</key>
+	<data>
+	LS0tLS1CRUdJTg==
+	</data>
+	<key>hosts.1.mac</key>
+	<data>
+	</data>
+	<key>hosts.1.hostname</key>
+	<string>a &amp; b &lt;c&gt;</string>
+	<key>blank</key>
+	<string></string>
+	<key>hosts.1.localport</key>
+	<integer>47989</integer>
+	<key>on</key>
+	<true/>
+	<key>off</key>
+	<false/>
+	<key>list</key>
+	<array><integer>1</integer><dict/></array>
+</dict>
+</plist>`;
+  const d = plist.parse(xml);
+  assert.strictEqual(d.certificate.toString(), '-----BEGIN');
+  assert.strictEqual(d['hosts.1.mac'].length, 0);
+  assert.strictEqual(d['hosts.1.hostname'], 'a & b <c>');
+  assert.strictEqual(d.blank, '');
+  assert.strictEqual(d['hosts.1.localport'], 47989);
+  assert.strictEqual(d.on, true);
+  assert.strictEqual(d.off, false);
+  assert.strictEqual(d.list.length, 2);
+  assert.throws(() => plist.parse('<plist><dict><key>x</key>'));
 });

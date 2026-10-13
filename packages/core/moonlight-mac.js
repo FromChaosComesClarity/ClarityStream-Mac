@@ -11,15 +11,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { tryExec, which } = require('./run');
+const plist = require('./plist-xml');
 
 const HOME = os.homedir();
 
 // Where a person might reasonably have put it, in the order macOS itself
-// would look.
+// would look. Homebrew's cask is not a separate place: it installs into
+// /Applications, leaves only a symlink in its versioned Caskroom folder, and
+// links a `moonlight` command into its bin, which the PATH check finds.
 const BUNDLE_PLACES = [
   '/Applications/Moonlight.app',
-  path.join(HOME, 'Applications', 'Moonlight.app'),
-  '/opt/homebrew/Caskroom/moonlight/latest/Moonlight.app'
+  path.join(HOME, 'Applications', 'Moonlight.app')
 ];
 
 function bundleExecutable(bundle) {
@@ -57,35 +59,46 @@ function find() {
   return { found: false, exe: null, tried };
 }
 
-// Qt writes QSettings into a plist whose name comes from the organisation and
-// application it was given, and Moonlight has used more than one over the
-// years. So the file is looked for rather than named.
+// Qt names the plist after the organisation's domain, reversed, and the
+// application: Moonlight 6.2 writes com.moonlight-stream.Moonlight.plist, and
+// only appears there once it has been opened. Anything else in Moonlight's own
+// domain is accepted in case the application name changes, but nothing outside
+// it: "any name containing moonlight" picked up the game Moonlighter on the
+// first Mac this ran on, and read it as a Moonlight that knew no hosts.
+const SETTINGS_NAME = 'com.moonlight-stream.Moonlight.plist';
+
+function pickSettingsFile(names) {
+  const candidates = names
+    .filter((n) => /^com\.moonlight-stream\.[^/]+\.plist$/i.test(n))
+    .sort((a, b) => (b === SETTINGS_NAME) - (a === SETTINGS_NAME));
+  return candidates[0] ?? null;
+}
+
 function settingsFile() {
   const dir = path.join(HOME, 'Library', 'Preferences');
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return null; }
-  const candidates = names
-    .filter((n) => /moonlight/i.test(n) && n.endsWith('.plist'))
-    // A domain that mentions the streaming project is more likely the app's
-    // own than something else that merely has the word in its name.
-    .sort((a, b) => (/moonlight-stream/i.test(b) ? 1 : 0) - (/moonlight-stream/i.test(a) ? 1 : 0));
-  return candidates.length ? path.join(dir, candidates[0]) : null;
+  const name = pickSettingsFile(names);
+  return name ? path.join(dir, name) : null;
 }
 
-// plutil ships with macOS, so the plist is converted rather than parsed by
-// hand. Binary plists are the normal case and are not readable as text.
+// plutil ships with macOS, so the plist is converted rather than decoded by
+// hand: binary plists are the normal case. It is converted to XML, not JSON,
+// because the certificates in it are <data>, which JSON cannot hold and
+// plutil will not drop.
 function readSettings() {
   const file = settingsFile();
-  if (!file) return { ok: false, reason: 'No Moonlight preferences file found.', file: null };
-  const r = tryExec('plutil', ['-convert', 'json', '-o', '-', file], { timeout: 8000 });
-  if (!r.ok) return { ok: false, reason: `plutil could not read ${file}`, file };
-  try { return { ok: true, file, data: JSON.parse(r.stdout) }; }
-  catch (err) { return { ok: false, reason: `That plist is not valid JSON once converted: ${err.message}`, file }; }
+  if (!file) return { ok: false, reason: 'No Moonlight preferences file found. Has Moonlight been opened once?', file: null };
+  const r = tryExec('plutil', ['-convert', 'xml1', '-o', '-', file], { timeout: 8000 });
+  if (!r.ok) return { ok: false, reason: `plutil could not read ${file}: ${(r.stderr ?? '').trim()}`, file };
+  try { return { ok: true, file, data: plist.parse(r.stdout) }; }
+  catch (err) { return { ok: false, reason: `Could not read ${file} as a property list: ${err.message}`, file }; }
 }
 
-// QSettings flattens its groups into single keys joined by slashes, so a host
-// looks like "hosts/1/hostname". The same information as the Linux .conf,
-// wearing a different coat.
+// On macOS QSettings flattens its groups into single keys joined by dots, so a
+// host looks like "hosts.1.hostname" (the Linux .conf has slashes). Each
+// address has its own port beside it, and an address that is not set is an
+// empty string with a port of 0, not a missing key.
 function hostsFromSettings(data) {
   if (!data || typeof data !== 'object') return [];
   const hosts = new Map();
@@ -95,12 +108,12 @@ function hostsFromSettings(data) {
   };
 
   for (const [key, value] of Object.entries(data)) {
-    const m = /^hosts\/(\d+)\/(.+)$/.exec(key);
+    const m = /^hosts\.(\d+)\.(.+)$/.exec(key);
     if (!m) continue;
     const h = get(Number(m[1]));
     const field = m[2];
 
-    const app = /^apps\/(\d+)\/(.+)$/.exec(field);
+    const app = /^apps\.(\d+)\.(.+)$/.exec(field);
     if (app) {
       const n = Number(app[1]) - 1;
       h.apps[n] = h.apps[n] ?? {};
@@ -115,21 +128,33 @@ function hostsFromSettings(data) {
     if (field === 'manualaddress') h.manualAddress = value ? String(value) : null;
     if (field === 'localaddress') h.localAddress = value ? String(value) : null;
     if (field === 'remoteaddress') h.remoteAddress = value ? String(value) : null;
-    if (field === 'manualport') h.port = Number(value) || 47989;
+    if (field === 'manualport') h.manualPort = Number(value) || null;
+    if (field === 'localport') h.localPort = Number(value) || null;
+    if (field === 'remoteport') h.remotePort = Number(value) || null;
     // Pairing is proven by the server certificate Moonlight keeps once it has
     // paired. Asking the host does not work: /serverinfo over plain HTTP
-    // reports PairStatus 0 even for a paired client.
-    if (field === 'srvcert') h.paired = String(value ?? '').length > 20;
+    // reports PairStatus 0 even for a paired client. It is <data>, so it
+    // arrives as a Buffer, and an unpaired host has an empty one.
+    if (field === 'srvcert') h.paired = (value?.length ?? 0) > 20;
   }
 
   return [...hosts.values()]
     .filter((h) => h.hostname)
-    .map((h) => ({
-      ...h,
-      apps: h.apps.filter(Boolean).filter((a) => a.name && !a.hidden),
-      address: h.manualAddress || h.localAddress || h.remoteAddress || h.hostname,
-      paired: Boolean(h.paired)
-    }));
+    .map((h) => {
+      // The port goes with the address it was stored beside.
+      const [address, port] = [
+        [h.manualAddress, h.manualPort],
+        [h.localAddress, h.localPort],
+        [h.remoteAddress, h.remotePort]
+      ].find(([a]) => a) ?? [h.hostname, null];
+      return {
+        ...h,
+        apps: h.apps.filter(Boolean).filter((a) => a.name && !a.hidden),
+        address,
+        port: port || 47989,
+        paired: Boolean(h.paired)
+      };
+    });
 }
 
 function knownHosts() {
@@ -175,6 +200,6 @@ function streamArgs(address, appName, opts = {}) {
 }
 
 module.exports = {
-  find, settingsFile, readSettings, hostsFromSettings, knownHosts,
+  find, pickSettingsFile, settingsFile, readSettings, hostsFromSettings, knownHosts,
   randomPin, pairArgs, streamArgs, CAPTURE_KEYS, ESCAPE_COMBO, BUNDLE_PLACES
 };
