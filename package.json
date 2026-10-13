@@ -1,0 +1,49 @@
+{
+  "name": "clarity-stream-client",
+  "version": "0.1.0",
+  "description": "Clarity Stream client for macOS. Play games streaming from a Linux host.",
+  "main": "apps/client/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "start:dev": "electron . --dev",
+    "test": "node --test test/",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --mac"
+  },
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "io.github.fromchaoscomesclarity.claritystreamclient",
+    "productName": "Clarity Stream Client",
+    "files": [
+      "apps/**/*",
+      "packages/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.games",
+      "icon": "build/icon.png",
+      "artifactName": "ClarityStreamClient-${arch}.${ext}",
+      "identity": null
+    }
+  }
+}
