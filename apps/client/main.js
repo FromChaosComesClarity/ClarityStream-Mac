@@ -28,6 +28,9 @@ const DEFAULTS = {
   bitrate: 20000,
   displayMode: 'fullscreen',
   vsync: true,
+  // Send this Mac's own shortcuts to the host rather than letting macOS eat
+  // them. Needs Moonlight to hold Accessibility permission.
+  captureSystemKeys: 'always',
   preferredApp: 'Clarity Couch Mode'
 };
 
@@ -132,7 +135,9 @@ ipcMain.handle('hosts', async () => {
     moonlightVia: found.via ?? null,
     settingsFile: known.file ?? null,
     settingsProblem: known.ok ? null : known.reason,
-    settings: readSettings()
+    settings: readSettings(),
+    captureChoices: moonlight.CAPTURE_KEYS,
+    escapeCombo: moonlight.ESCAPE_COMBO
   };
 });
 
@@ -148,7 +153,8 @@ ipcMain.handle('launch', (_e, { address, appName, settings }) => {
   const s = { ...readSettings(), ...(settings ?? {}) };
   return launchMoonlight(moonlight.streamArgs(address, appName, {
     resolution: s.resolution, fps: s.fps, bitrate: s.bitrate,
-    displayMode: s.displayMode, vsync: s.vsync
+    displayMode: s.displayMode, vsync: s.vsync,
+    captureSystemKeys: s.captureSystemKeys
   }));
 });
 

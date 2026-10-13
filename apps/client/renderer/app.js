@@ -138,7 +138,10 @@ function drawApps() {
         toast('That host already has a session running. It will take over.', true);
       }
       const r = await window.cs.launch({ address: host.address, appName: a.name });
-      toast(`Starting ${a.name}…`);
+      const combo = data.escapeCombo ?? 'Ctrl+Alt+Shift+Q';
+      toast(data.settings.captureSystemKeys === 'never'
+        ? `Starting ${a.name}…`
+        : `Starting ${a.name}. Press ${combo} to come back.`);
       console.info('launch:', r.command);
     });
     li.append(play);
@@ -153,6 +156,18 @@ function drawSettings() {
   $('bitrate').value = String(s.bitrate);
   $('displayMode').value = s.displayMode;
   $('vsync').checked = Boolean(s.vsync);
+  $('captureSystemKeys').value = s.captureSystemKeys ?? 'always';
+
+  // The point of capturing shortcuts is that the local ones stop working, so
+  // the way out is said plainly. The permission is said too, because without
+  // it macOS accepts the setting and quietly ignores it.
+  const combo = data.escapeCombo ?? 'Ctrl+Alt+Shift+Q';
+  $('keysHint').textContent = s.captureSystemKeys === 'never'
+    ? `Your own shortcuts keep working here, so Command-Tab and the rest never reach the host. ` +
+      `${combo} always ends a session.`
+    : `While streaming, your shortcuts go to the host instead of this Mac. This needs Moonlight ` +
+      `to have Accessibility permission, in System Settings under Privacy & Security; without it ` +
+      `macOS ignores the setting. ${combo} always ends the session.`;
 
   const pill = $('moonlightPill');
   pill.textContent = data.moonlight ? 'Moonlight ready' : 'Moonlight missing';
@@ -188,6 +203,7 @@ async function refresh() {
 }
 
 for (const [id, key, read] of [
+  ['captureSystemKeys', 'captureSystemKeys', (e) => e.value],
   ['resolution', 'resolution', (e) => e.value],
   ['fps', 'fps', (e) => Number(e.value)],
   ['bitrate', 'bitrate', (e) => Number(e.value) || 20000],

@@ -144,8 +144,28 @@ function randomPin() {
 
 function pairArgs(address, pin) { return ['pair', address, '--pin', pin]; }
 
+// How Moonlight gets out of the way of this Mac's own shortcuts.
+//
+//   never       Command-Tab and the rest stay here, so they do not reach the
+//               host and a stream window can be closed out from under you
+//   fullscreen  they go to the host while the stream is fullscreen
+//   always      they go to the host even windowed
+//
+// On macOS this needs Moonlight to hold Accessibility permission, in System
+// Settings under Privacy & Security. Without it the setting is accepted and
+// quietly does nothing, which is worth saying in the window rather than
+// leaving someone to discover.
+//
+// Ctrl+Alt+Shift+Q always ends the session whatever the setting: Moonlight
+// reserves it so there is a way out of a capture that is working.
+const CAPTURE_KEYS = ['never', 'fullscreen', 'always'];
+const ESCAPE_COMBO = 'Ctrl+Alt+Shift+Q';
+
 function streamArgs(address, appName, opts = {}) {
   const args = ['stream', address, appName];
+  if (opts.captureSystemKeys && CAPTURE_KEYS.includes(opts.captureSystemKeys)) {
+    args.push('--capture-system-keys', opts.captureSystemKeys);
+  }
   if (opts.resolution) args.push('--resolution', opts.resolution);
   if (opts.fps) args.push('--fps', String(opts.fps));
   if (opts.bitrate) args.push('--bitrate', String(opts.bitrate));
@@ -156,5 +176,5 @@ function streamArgs(address, appName, opts = {}) {
 
 module.exports = {
   find, settingsFile, readSettings, hostsFromSettings, knownHosts,
-  randomPin, pairArgs, streamArgs, BUNDLE_PLACES
+  randomPin, pairArgs, streamArgs, CAPTURE_KEYS, ESCAPE_COMBO, BUNDLE_PLACES
 };
