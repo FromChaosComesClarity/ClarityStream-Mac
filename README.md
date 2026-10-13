@@ -85,6 +85,13 @@ the host does not work: `/serverinfo` over plain HTTP reports `PairStatus 0`
 even for a client that is paired, because pairing is proven with a client
 certificate over HTTPS on another port.
 
+## Notes between machines
+
+`handoff/` carries messages between the Claude sessions working on this on
+different machines: one on the Linux host, one here. Start with the newest.
+The Linux repository has its own channel, and the two clients share no code
+but behave identically, so a finding in one is usually a finding in both.
+
 ## Licence
 
 MIT.
