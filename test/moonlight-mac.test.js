@@ -10,9 +10,9 @@ const { parseBrowse, parseResolve } = require('../packages/core/discovery-mac');
 // QSettings writes its groups as slash-joined keys, so the plist is flat.
 const PLIST = {
   'hosts/1/hostname': 'omarchy',
-  'hosts/1/uuid': 'B2CE7ADE-2DC7-C927-0418-971D512FDE50',
+  'hosts/1/uuid': '00000000-0000-4000-8000-000000000001',
   'hosts/1/manualaddress': '',
-  'hosts/1/localaddress': '192.168.0.127',
+  'hosts/1/localaddress': '192.0.2.10',
   'hosts/1/manualport': 47989,
   'hosts/1/srvcert': '-----BEGIN CERTIFICATE-----\nMIIC0jCCAbqgAwIBAgIUZ...\n-----END CERTIFICATE-----\n',
   'hosts/1/apps/1/name': 'Clarity Couch Mode',
@@ -25,7 +25,7 @@ const PLIST = {
   'hosts/1/apps/3/id': '999',
   'hosts/1/apps/3/hidden': true,
   'hosts/2/hostname': 'never-paired',
-  'hosts/2/localaddress': '192.168.0.50',
+  'hosts/2/localaddress': '192.0.2.11',
   // no srvcert: not paired
   'latestsupportedversion-v1': '99.99.99.99',
   'gcmapping/size': 0
@@ -36,7 +36,7 @@ test('hosts come out of a flattened plist', () => {
   assert.strictEqual(hosts.length, 2);
   const omarchy = hosts.find((h) => h.hostname === 'omarchy');
   assert.ok(omarchy);
-  assert.strictEqual(omarchy.address, '192.168.0.127');
+  assert.strictEqual(omarchy.address, '192.0.2.10');
   assert.strictEqual(omarchy.port, 47989);
 });
 
@@ -55,7 +55,7 @@ test('hidden apps are left out and the rest keep their order', () => {
 
 test('an empty manualaddress does not win over a real one', () => {
   // Qt writes the key with an empty string rather than omitting it.
-  assert.strictEqual(hostsFromSettings(PLIST)[0].address, '192.168.0.127');
+  assert.strictEqual(hostsFromSettings(PLIST)[0].address, '192.0.2.10');
 });
 
 test('rubbish in, nothing out, no crash', () => {
