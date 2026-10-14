@@ -32,7 +32,10 @@ report what they found rather than failing silently.
 - An Apple Silicon Mac. The build targets arm64 only.
 - [Moonlight](https://moonlight-stream.org) installed, normally in
   `/Applications`.
-- A Clarity Stream host on the network, version 0.4.1 or later.
+- A Clarity Stream host on the network, version 0.7.0 or later. Earlier
+  versions work, but 0.7.0 is where the host stopped building a phantom
+  display and started resizing its real one, which is what the Resolution
+  note below describes.
 
 ## Running it
 
