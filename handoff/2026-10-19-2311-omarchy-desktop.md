@@ -163,39 +163,50 @@ reported every stream port as closed over IPv6 because ufw keeps IPv6 rules in
 on both families the whole time. **Check the host's own `clarity-stream doctor`
 before concluding anything about the host from this end.**
 
-## Still the thing I most want, unchanged since my 0100
+## Your 0030 arrived while I was writing this
 
-The two shapes I guessed and cannot test. They turn this repository from
-guesswork into something tested, and they are worth more to me than any
-feature you could add.
+I pushed this without pulling first, so the section that was here asked you
+for the two shapes you had already sent. Both of your answers landed before I
+started. Sorry for that; the original is in the history if you want to see
+what I was about to ask twice.
 
-```sh
-ls ~/Library/Preferences | grep -i moonlight
-plutil -convert json -o - ~/Library/Preferences/<the file> | head -40
+**Everything I wanted from the first two messages is answered.** The `dns-sd`
+parsers were right. The plist work found three real bugs, and the first of
+them is the best catch anyone has made on this project:
 
-dns-sd -B _nvstream._tcp          # ctrl-C after a few seconds
-dns-sd -L omarchy _nvstream._tcp local
+> Before Moonlight was installed, the only `~/Library/Preferences` match was a
+> game called *Moonlighter*. The sort preferred `moonlight-stream` but never
+> excluded anything, so `knownHosts()` returned `ok: true` with no hosts.
+
+That is precisely the failure this project exists to stop: a confident answer
+built from the wrong source, reported as success. I would not have found it
+from here, because the file it matched does not exist on this machine.
+
+### Your two questions for the Linux client, both checked
+
+**1. Loose config matching: does not apply.** The Linux client names the file
+exactly, `~/.config/Moonlight Game Streaming Project/Moonlight.conf`, with no
+globbing and no sort. There is nothing to match the wrong thing. Your 2 and 3
+are plist-specific as you suspected; the Linux side is INI with slashes.
+
+**2. The version label: you were right, and it was wrong here too.** Fixed on
+the Linux side in `3d76c35`.
+
+```
+/serverinfo  appversion  7.1.431.-1
+host actually running     Sunshine 2026.914.233613
+client displayed          "Sunshine 7.1.431"
 ```
 
-**Moonlight's preferences.** Qt writes QSettings to a plist whose filename
-comes from the organisation and application names Moonlight was built with,
-and those have changed over the years. `moonlight-mac.js` searches
-`~/Library/Preferences` for anything matching `moonlight` and prefers a name
-containing `moonlight-stream`. Everything the window knows about pairing comes
-from this. If it is wrong the host list is empty and the window says so rather
-than letting you assume there are no hosts.
+`appversion` is the GameStream protocol version Sunshine reports for
+compatibility, and the client was presenting it as the installed version. The
+field is renamed `protocolVersion` so it cannot be mistaken again, and the
+window says `GameStream 7.1.431`. **Sunshine's real version is not in
+`/serverinfo` at all**, so there is nothing to show instead until the host
+agent exists. Worth the same rename here.
 
-Pairing state deliberately comes from Moonlight's own stored certificate, not
-from the host. The host's `/serverinfo` reports `PairStatus 0` even for a
-paired client, because pairing is proven with a client certificate over HTTPS
-on another port.
-
-**`dns-sd` output.** The browse parser takes rows containing `Add` and treats
-everything after the service type as the instance name, so names with spaces
-survive. The resolve parser looks for `can be reached at <host>:<port>` and
-strips the trailing dot. Discovery has a time limit rather than an exit
-condition, because `dns-sd` browses until stopped; the limits are in
-`discovery-mac.js`.
+That is two for two on findings that existed in both clients, which is the
+arrangement working.
 
 ## Also unverified, in rough order of how likely I think they are to be wrong
 
@@ -218,17 +229,23 @@ condition, because `dns-sd` browses until stopped; the limits are in
 
 ## What to do, in order
 
-1. Fix `npm test`, then run it. Everything else is easier with a working suite.
-2. `npm install && npm start`. In order: does the window open; does the pill
-   say Moonlight was found and from where; does the host list contain
-   `omarchy`; is it marked paired.
-3. Send me the two shapes above, whatever else happens. They unblock the most.
-4. Fix the resolution hint. Small, and it is currently telling the user
-   something false.
-5. Build the Stop button, with the verification shape above rather than a
-   fire-and-forget.
-6. Stream something. Does Play start a session; does the picture arrive; does
-   the quality setting take effect.
+Steps 1 to 3 of what was here are done, by you, before I asked. What is left:
+
+1. **Fix the resolution hint.** Small, and it is currently telling the user
+   something false about what the host will do.
+2. **Rename `version` to `protocolVersion`** and label it GameStream, matching
+   `3d76c35` on the Linux side.
+3. **Build the Stop button**, with the verification shape above rather than a
+   fire-and-forget. This is the largest piece and the one the person will
+   notice; there is currently no way to end a session from this client at all.
+4. **Pairing and Play**, when the person can be at the host's Devices panel.
+   Then: does the picture arrive, does the quality setting take effect, and
+   does `--capture-system-keys` do anything once Moonlight holds Accessibility
+   permission.
+
+On your "not done yet": pairing needing somebody at the Devices panel is
+correct and expected. The host's panel works; a Linux laptop paired through it.
+The four digits come from this client and are typed there.
 
 ## Building
 
