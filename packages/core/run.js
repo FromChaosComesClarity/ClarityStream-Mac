@@ -49,9 +49,34 @@ function runFor(cmd, args, ms) {
   });
 }
 
+// The same as tryExec, without holding the process while it waits. Electron's
+// main process draws nothing itself, but it answers the window, and a
+// synchronous wait of several seconds leaves the window unable to ask it
+// anything at all.
+function execAsync(cmd, args = [], opts = {}) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, {
+      encoding: 'utf8',
+      timeout: opts.timeout ?? 5000,
+      maxBuffer: 16 * 1024 * 1024
+    }, (err, stdout, stderr) => {
+      const command = [cmd, ...args].join(' ');
+      if (!err) { resolve({ ok: true, stdout, cmd: command }); return; }
+      resolve({
+        ok: false,
+        stdout: stdout ? String(stdout) : '',
+        stderr: stderr ? String(stderr) : String(err.message),
+        code: typeof err.code === 'number' ? err.code : null,
+        timedOut: Boolean(err.killed),
+        cmd: command
+      });
+    });
+  });
+}
+
 function which(bin) {
   const r = tryExec('/bin/sh', ['-c', `command -v ${bin}`]);
   return r.ok ? r.stdout.trim() : null;
 }
 
-module.exports = { tryExec, runFor, which, execFile, spawn };
+module.exports = { tryExec, execAsync, runFor, which, execFile, spawn };

@@ -169,6 +169,10 @@ function randomPin() {
 
 function pairArgs(address, pin) { return ['pair', address, '--pin', pin]; }
 
+// Present in the macOS bundle (`Moonlight quit --help`, 6.2.0). It needs the
+// pairing certificate to send anything; see session.js for what it is worth.
+function quitArgs(address) { return ['quit', address]; }
+
 // How Moonlight gets out of the way of this Mac's own shortcuts.
 //
 //   never       Command-Tab and the rest stay here, so they do not reach the
@@ -201,5 +205,5 @@ function streamArgs(address, appName, opts = {}) {
 
 module.exports = {
   find, pickSettingsFile, settingsFile, readSettings, hostsFromSettings, knownHosts,
-  randomPin, pairArgs, streamArgs, CAPTURE_KEYS, ESCAPE_COMBO, BUNDLE_PLACES
+  randomPin, pairArgs, quitArgs, streamArgs, CAPTURE_KEYS, ESCAPE_COMBO, BUNDLE_PLACES
 };

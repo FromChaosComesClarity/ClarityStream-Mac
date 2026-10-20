@@ -17,6 +17,8 @@ const { spawn } = require('node:child_process');
 const discovery = require('../../packages/core/discovery-mac');
 const moonlight = require('../../packages/core/moonlight-mac');
 const hostLink = require('../../packages/core/host-link');
+const session = require('../../packages/core/session');
+const { execAsync } = require('../../packages/core/run');
 
 const DEV = process.argv.includes('--dev');
 let win = null;
@@ -113,13 +115,13 @@ async function hosts() {
 
   // Asked in parallel: one unreachable host should not hold up the rest.
   return Promise.all([...byName.values()].map(async (h) => {
-    const info = hostLink.serverInfo(h.address, h.port, { timeout: 2500 });
+    const info = await hostLink.serverInfoAsync(h.address, h.port, { timeout: 2500 });
     return {
       ...h,
       reachable: info.reachable,
       busy: Boolean(info.busy),
       state: info.state ?? null,
-      version: info.version ?? null,
+      protocolVersion: info.protocolVersion ?? null,
       currentGameId: info.currentGameId ?? null
     };
   }));
@@ -156,6 +158,21 @@ ipcMain.handle('launch', (_e, { address, appName, settings }) => {
     displayMode: s.displayMode, vsync: s.vsync,
     captureSystemKeys: s.captureSystemKeys
   }));
+});
+
+// Asks the host to end the session, then checks that it did. Whether it is
+// paired is read from Moonlight's own settings, the same source the list uses,
+// and matched by name, the way hosts() merges the two lists.
+ipcMain.handle('quit', async (_e, { name, address, port }) => {
+  const found = moonlight.find();
+  if (!found.found) return { ok: false, ended: false, reason: 'Moonlight is not installed, so there is nothing to ask.' };
+  const key = String(name ?? '').toLowerCase();
+  const paired = moonlight.knownHosts().hosts.some((k) => k.paired && k.hostname.toLowerCase() === key);
+  return session.endSession({
+    address, port: port ?? 47989, paired,
+    probe: (a, p) => hostLink.serverInfoAsync(a, p, { timeout: 2500 }),
+    quit: (a) => execAsync(found.exe, moonlight.quitArgs(a), { timeout: 20000 })
+  });
 });
 
 ipcMain.handle('open:moonlight', () => launchMoonlight([]));

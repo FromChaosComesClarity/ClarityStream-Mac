@@ -48,6 +48,10 @@
 .app-title { flex: 1; min-width: 0; font-weight: 600; }
 .app-note { font-size: 12px; color: var(--muted); }
 
+/* A running session, and the way to end it, above what could be started. */
+.stop-row { justify-content: space-between; margin-bottom: 12px; }
+.stop-row .muted { flex: 1; min-width: 0; }
+
 /* --------------------------------------------------------------- quality */
 
 .quality { display: grid; gap: 12px 18px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }

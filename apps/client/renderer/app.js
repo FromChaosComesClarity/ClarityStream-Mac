@@ -34,7 +34,7 @@ function drawHosts() {
   if (!data.moonlight) {
     list.append(el('li', 'pad muted',
       'Moonlight is not installed, or not where I looked: /Applications, ~/Applications, ' +
-      'Homebrew\u2019s Caskroom, Spotlight and your PATH. Install it from ' +
+      'Spotlight and your PATH. Install it from ' +
       'moonlight-stream.org and press Look again.'));
     return;
   }
@@ -64,7 +64,9 @@ function drawHosts() {
     const main = el('div', 'host-main');
     main.append(el('div', 'host-name', h.name));
     const bits = [h.address];
-    if (h.version) bits.push(`Sunshine ${h.version.split('.').slice(0, 3).join('.')}`);
+    // The protocol version Sunshine reports for compatibility, not Sunshine's
+    // own, which /serverinfo does not carry.
+    if (h.protocolVersion) bits.push(`GameStream ${h.protocolVersion.split('.').slice(0, 3).join('.')}`);
     if (!h.reachable) bits.push('not answering, so it cannot be paired or played');
     else if (h.busy) bits.push('a session is already running');
     main.append(el('div', 'host-sub', bits.join(' · ')));
@@ -109,6 +111,7 @@ function drawApps() {
   if (!host) { card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
   $('playHost').textContent = `${host.name} · ${host.address}`;
+  drawStop(host);
 
   const list = $('apps');
   list.replaceChildren();
@@ -149,6 +152,36 @@ function drawApps() {
   }
 }
 
+// Closing Moonlight's window does not end a session: the host stays busy and
+// refuses the next connection until its own timeout gives up. So a running
+// session gets a way to end it, and the answer shown is the host's state
+// afterwards, never just that a command was sent.
+function drawStop(host) {
+  const row = $('stopRow');
+  row.replaceChildren();
+  row.classList.toggle('hidden', !host.busy);
+  if (!host.busy) return;
+
+  row.append(el('span', 'muted',
+    'A session is running on this host. Closing Moonlight\u2019s window does not end it.'));
+  const stop = el('button', 'danger', 'Stop the session');
+  stop.addEventListener('click', async () => {
+    stop.disabled = true;
+    stop.textContent = 'Stopping…';
+    try {
+      const r = await window.cs.quit({ name: host.name, address: host.address, port: host.port });
+      if (r.alreadyFree) toast('No session was running.');
+      else if (r.ended) toast(`The host reports the session ended, after ${Math.round((r.waitedMs ?? 0) / 1000)}s.`);
+      else toast(r.reason ?? 'The session did not end.', true);
+    } catch (err) {
+      toast(`Could not ask the host: ${err.message}`, true);
+    } finally {
+      refresh().catch(() => {});
+    }
+  });
+  row.append(stop);
+}
+
 function drawSettings() {
   const s = data.settings;
   $('resolution').value = s.resolution;
@@ -176,14 +209,13 @@ function drawSettings() {
   // in several places and its settings are not where a Linux port expects.
   pill.title = data.moonlight
     ? `${data.moonlightPath}\nfound via ${data.moonlightVia}`
-    : 'Looked in /Applications, ~/Applications, Homebrew and Spotlight.';
+    : 'Looked in /Applications, ~/Applications, Spotlight and PATH.';
 
-  // What the host does with this is worth saying, because it is not obvious
-  // that choosing a resolution here changes anything on the other machine.
+  // Said because it is easy to assume the host will match it. It will not:
+  // since host 0.8.0 nothing on the host changes resolution for a session.
   $('resHint').textContent =
-    `A Clarity Stream host sets its own display to ${s.resolution} while you are playing, and ` +
-    `puts it back afterwards. If it has no mode that shape, it streams what it has and this ` +
-    `machine scales it.`;
+    `The host streams whatever its display is already set to; ${s.resolution} is what this Mac ` +
+    `asks for. If the two differ, the picture is scaled to fit rather than refused.`;
 }
 
 /* --------------------------------------------------------------- actions */
