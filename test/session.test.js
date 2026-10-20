@@ -101,3 +101,34 @@ test('/serverinfo: appversion is the protocol version, not Sunshine’s', () => 
     [false, null]);
   assert.strictEqual(parseServerInfo('').reachable, false);
 });
+
+test('serverInfo asks over HTTP from this process, and says when nothing answers', async () => {
+  const http = require('node:http');
+  const { serverInfo } = require('../packages/core/host-link');
+  const xml = '<root status_code="200"><hostname>omarchy</hostname><appversion>7.1.431.-1</appversion>' +
+    '<state>SUNSHINE_SERVER_FREE</state><currentgame>0</currentgame></root>';
+  const paths = [];
+  const server = http.createServer((req, res) => {
+    paths.push(req.url);
+    if (req.url.includes('silent')) return; // never answers
+    res.end(xml);
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const ok = await serverInfo('127.0.0.1', port);
+    assert.deepStrictEqual([ok.reachable, ok.hostname, ok.busy, ok.protocolVersion], [true, 'omarchy', false, '7.1.431.-1']);
+    assert.strictEqual(paths[0], '/serverinfo?uniqueid=0123456789ABCDEF');
+
+    const slow = await serverInfo('127.0.0.1', port, { uniqueId: 'silent', timeout: 150 });
+    assert.strictEqual(slow.reachable, false);
+    assert.match(slow.reason, /in time/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  }
+  // A port nobody listens on: refused, and the code is kept for diagnosis.
+  const refused = await serverInfo('127.0.0.1', port, { timeout: 1000 });
+  assert.strictEqual(refused.reachable, false);
+  assert.match(refused.reason, /ECONNREFUSED/);
+});

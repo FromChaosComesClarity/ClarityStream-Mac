@@ -1,16 +1,18 @@
 'use strict';
-// Asking a host what it is doing. The same on every platform, because it is
-// just HTTP, and curl ships with macOS.
+// Asking a host what it is doing. Plain HTTP on 47989, which needs no pairing.
+//
+// Asked from this process rather than through curl. macOS gates the local
+// network per application, and it only asks permission when the application
+// itself connects: a curl it starts is refused with EHOSTUNREACH and nobody
+// is asked, so an installed copy reported every host as "not answering" and
+// never showed the prompt that would have fixed it. Run from a terminal it
+// worked, because there the terminal's permission applied.
 
-const { tryExec, execAsync } = require('./run');
+const http = require('node:http');
 
 function tag(xml, name) {
   const m = new RegExp(`<${name}[^>]*>([^<]*)</${name}>`).exec(xml ?? '');
   return m ? m[1] : null;
-}
-
-function serverInfoUrl(address, port, uniqueId) {
-  return `http://${address}:${port}/serverinfo?uniqueid=${uniqueId}`;
 }
 
 function parseServerInfo(xml) {
@@ -32,17 +34,28 @@ function parseServerInfo(xml) {
 }
 
 function serverInfo(address, port = 47989, { uniqueId = '0123456789ABCDEF', timeout = 5000 } = {}) {
-  const url = serverInfoUrl(address, port, uniqueId);
-  const r = tryExec('curl', ['-s', '-m', String(Math.ceil(timeout / 1000)), url], { timeout: timeout + 2000 });
-  return parseServerInfo(r.ok ? r.stdout : '');
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (xml, reason) => {
+      if (settled) return;
+      settled = true;
+      const r = parseServerInfo(xml);
+      resolve(r.reachable || !reason ? r : { ...r, reason });
+    };
+    const req = http.get({
+      host: address, port, path: `/serverinfo?uniqueid=${uniqueId}`, timeout
+    }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (d) => { body += d; });
+      res.on('end', () => done(body));
+      res.on('error', (err) => done('', `No answer from the host: ${err.code ?? err.message}`));
+    });
+    req.on('timeout', () => { req.destroy(); done('', 'No answer from the host in time.'); });
+    // EHOSTUNREACH here, for a host that answers everything else on this Mac,
+    // is macOS refusing this application the local network.
+    req.on('error', (err) => done('', `No answer from the host: ${err.code ?? err.message}`));
+  });
 }
 
-// For anything that asks repeatedly, so the main process is free between
-// answers.
-async function serverInfoAsync(address, port = 47989, { uniqueId = '0123456789ABCDEF', timeout = 5000 } = {}) {
-  const url = serverInfoUrl(address, port, uniqueId);
-  const r = await execAsync('curl', ['-s', '-m', String(Math.ceil(timeout / 1000)), url], { timeout: timeout + 2000 });
-  return parseServerInfo(r.ok ? r.stdout : '');
-}
-
-module.exports = { serverInfo, serverInfoAsync, parseServerInfo };
+module.exports = { serverInfo, parseServerInfo };

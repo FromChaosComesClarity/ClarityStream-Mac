@@ -67,7 +67,14 @@ function drawHosts() {
     // The protocol version Sunshine reports for compatibility, not Sunshine's
     // own, which /serverinfo does not carry.
     if (h.protocolVersion) bits.push(`GameStream ${h.protocolVersion.split('.').slice(0, 3).join('.')}`);
-    if (!h.reachable) bits.push('not answering, so it cannot be paired or played');
+    // A host that announces itself but cannot be connected to, refused at
+    // once with EHOSTUNREACH, is nearly always macOS keeping this application
+    // off the local network. It asks once; a "Don't Allow" sticks, and from
+    // then on every host just looks dead.
+    if (!h.reachable && h.discovered && /EHOSTUNREACH/.test(h.unreachableReason ?? '')) {
+      bits.push('on the network, but macOS is not letting this app reach it. Allow Clarity Stream ' +
+        'Client in System Settings \u2192 Privacy & Security \u2192 Local Network');
+    } else if (!h.reachable) bits.push('not answering, so it cannot be paired or played');
     else if (h.busy) bits.push('a session is already running');
     main.append(el('div', 'host-sub', bits.join(' · ')));
     li.append(main);

@@ -115,10 +115,11 @@ async function hosts() {
 
   // Asked in parallel: one unreachable host should not hold up the rest.
   return Promise.all([...byName.values()].map(async (h) => {
-    const info = await hostLink.serverInfoAsync(h.address, h.port, { timeout: 2500 });
+    const info = await hostLink.serverInfo(h.address, h.port, { timeout: 2500 });
     return {
       ...h,
       reachable: info.reachable,
+      unreachableReason: info.reachable ? null : (info.reason ?? null),
       busy: Boolean(info.busy),
       state: info.state ?? null,
       protocolVersion: info.protocolVersion ?? null,
@@ -170,7 +171,7 @@ ipcMain.handle('quit', async (_e, { name, address, port }) => {
   const paired = moonlight.knownHosts().hosts.some((k) => k.paired && k.hostname.toLowerCase() === key);
   return session.endSession({
     address, port: port ?? 47989, paired,
-    probe: (a, p) => hostLink.serverInfoAsync(a, p, { timeout: 2500 }),
+    probe: (a, p) => hostLink.serverInfo(a, p, { timeout: 2500 }),
     quit: (a) => execAsync(found.exe, moonlight.quitArgs(a), { timeout: 20000 })
   });
 });

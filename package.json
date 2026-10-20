@@ -43,7 +43,13 @@
       "category": "public.app-category.games",
       "icon": "build/icon.png",
       "artifactName": "ClarityStreamClient-${arch}.${ext}",
-      "identity": null
+      "identity": null,
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "Clarity Stream looks for game-streaming hosts on your network and asks them whether they are free.",
+        "NSBonjourServices": [
+          "_nvstream._tcp"
+        ]
+      }
     }
   }
 }
